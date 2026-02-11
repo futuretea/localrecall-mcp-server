@@ -130,9 +130,21 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body 
 
 	var apiResp APIResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		// Provide more context in error message
-		return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
-			resp.StatusCode, len(respBody), err)
+		// If parsing as APIResponse fails, try to parse as raw data
+		// Some LocalRecall versions/endpoints return raw arrays or objects directly
+		var rawData interface{}
+		if err2 := json.Unmarshal(respBody, &rawData); err2 == nil {
+			// Wrap raw data in APIResponse format
+			apiResp = APIResponse{
+				Success: true,
+				Data:    rawData,
+			}
+			fmt.Printf("DEBUG: Wrapped raw response data in APIResponse format\n")
+		} else {
+			// Both parsing attempts failed
+			return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
+				resp.StatusCode, len(respBody), err)
+		}
 	}
 
 	// Check if the response is valid
@@ -203,9 +215,21 @@ func (c *Client) makeMultipartRequest(ctx context.Context, endpoint, filename st
 
 	var apiResp APIResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		// Provide more context in error message
-		return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
-			resp.StatusCode, len(respBody), err)
+		// If parsing as APIResponse fails, try to parse as raw data
+		// Some LocalRecall versions/endpoints return raw arrays or objects directly
+		var rawData interface{}
+		if err2 := json.Unmarshal(respBody, &rawData); err2 == nil {
+			// Wrap raw data in APIResponse format
+			apiResp = APIResponse{
+				Success: true,
+				Data:    rawData,
+			}
+			fmt.Printf("DEBUG: Wrapped raw response data in APIResponse format\n")
+		} else {
+			// Both parsing attempts failed
+			return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
+				resp.StatusCode, len(respBody), err)
+		}
 	}
 
 	// Check if the response is valid
@@ -243,24 +267,36 @@ func (c *Client) Search(ctx context.Context, collectionName, query string, maxRe
 		return nil, err
 	}
 
-	// Extract data from response
-	data, ok := apiResp.Data.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response data format")
-	}
-
+	// Handle two possible response formats:
+	// 1. Standard APIResponse with data.results: {success: true, data: {results: [...], count: N}}
+	// 2. Raw array response (wrapped by makeRequest): {success: true, data: [...]}
 	results := []map[string]interface{}{}
-	if resultsData, ok := data["results"].([]interface{}); ok {
-		for _, r := range resultsData {
+	count := 0
+
+	// Try to extract as standard format first
+	if data, ok := apiResp.Data.(map[string]interface{}); ok {
+		// Standard format: data.results
+		if resultsData, ok := data["results"].([]interface{}); ok {
+			for _, r := range resultsData {
+				if resultMap, ok := r.(map[string]interface{}); ok {
+					results = append(results, resultMap)
+				}
+			}
+		}
+		if countVal, ok := data["count"].(float64); ok {
+			count = int(countVal)
+		}
+	} else if resultsArray, ok := apiResp.Data.([]interface{}); ok {
+		// Raw array format (some LocalRecall versions return this)
+		fmt.Printf("DEBUG: Processing raw array response\n")
+		for _, r := range resultsArray {
 			if resultMap, ok := r.(map[string]interface{}); ok {
 				results = append(results, resultMap)
 			}
 		}
-	}
-
-	count := 0
-	if countVal, ok := data["count"].(float64); ok {
-		count = int(countVal)
+		count = len(results)
+	} else {
+		return nil, fmt.Errorf("unexpected response data format: %T", apiResp.Data)
 	}
 
 	return &SearchResult{
