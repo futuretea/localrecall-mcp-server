@@ -1,0 +1,40 @@
+# LocalRecall MCP Server Configuration Example
+
+# Server Configuration
+# Port for HTTP/SSE mode (0 = stdio mode, default: 0)
+port: 0
+
+# Public base URL for SSE endpoint (optional)
+# Example: https://example.com:8080
+sse_base_url: ""
+
+# Log level (0-9, default: 5)
+# 0 = panic, 1 = fatal, 2 = error, 3 = warn, 4 = info, 5 = debug, 6+ = trace
+log_level: 5
+
+# LocalRecall Configuration
+# LocalRecall API server URL (default: http://localhost:8080)
+localrecall_url: http://localhost:8080
+
+# LocalRecall API key (optional)
+localrecall_api_key: ""
+
+# Default collection name (optional)
+# If set, collection_name parameter becomes optional for relevant tools
+localrecall_collection: ""
+
+# Output Configuration
+# Output format for list operations: json, yaml, table (default: json)
+list_output: json
+
+# Fields to filter from output (optional)
+# These fields will be removed from the response to reduce verbosity
+output_filters: []
+
+# Tool Configuration
+# List of tools to enable (empty = all tools enabled)
+# Available tools: search, create_collection, reset_collection, add_document, list_collections, list_files, delete_entry
+enabled_tools: []
+
+# List of tools to disable (empty = no tools disabled)
+disabled_tools: []
