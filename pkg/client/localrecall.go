@@ -86,6 +86,71 @@ func NewClient(baseURL, apiKey string) *Client {
 	}
 }
 
+// parseAPIResponse parses and validates APIResponse from response body
+func parseAPIResponse(respBody []byte, statusCode int) (*APIResponse, error) {
+	var apiResp APIResponse
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
+			statusCode, len(respBody), err)
+	}
+
+	// Check if the response is valid
+	if !apiResp.Success && apiResp.Error == nil && apiResp.Data == nil {
+		return nil, fmt.Errorf("invalid API response: missing success, error, and data fields")
+	}
+
+	if !apiResp.Success {
+		errorMsg := "unknown error"
+		if apiResp.Error != nil {
+			errorMsg = fmt.Sprintf("%s: %s", apiResp.Error.Code, apiResp.Error.Message)
+			if apiResp.Error.Details != "" {
+				errorMsg += " - " + apiResp.Error.Details
+			}
+		}
+		return nil, fmt.Errorf("API error: %s", errorMsg)
+	}
+
+	return &apiResp, nil
+}
+
+// getDataMap extracts data as map[string]interface{} from APIResponse
+func getDataMap(resp *APIResponse) (map[string]interface{}, error) {
+	data, ok := resp.Data.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected response data format")
+	}
+	return data, nil
+}
+
+// getStringField extracts a string field from data map
+func getStringField(data map[string]interface{}, field string) string {
+	if val, ok := data[field].(string); ok {
+		return val
+	}
+	return ""
+}
+
+// getStringArray extracts a string array from data map
+func getStringArray(data map[string]interface{}, field string) []string {
+	result := []string{}
+	if arr, ok := data[field].([]interface{}); ok {
+		for _, item := range arr {
+			if str, ok := item.(string); ok {
+				result = append(result, str)
+			}
+		}
+	}
+	return result
+}
+
+// getIntField extracts an int field from data map
+func getIntField(data map[string]interface{}, field string) int {
+	if val, ok := data[field].(float64); ok {
+		return int(val)
+	}
+	return 0
+}
+
 // makeRequest makes an HTTP request to the LocalRecall API
 func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body interface{}) (*APIResponse, error) {
 	var reqBody io.Reader
@@ -121,37 +186,13 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body 
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Add debug logging for response (helpful for troubleshooting)
-	if len(respBody) > 1000 {
-		fmt.Printf("DEBUG: Response body (truncated): %s...\n", string(respBody[:1000]))
-	} else {
-		fmt.Printf("DEBUG: Response body: %s\n", string(respBody))
-	}
+	// Debug logging can be enabled via environment variable DEBUG_API_RESPONSES=true
+	// Note: Avoid using fmt.Printf in production code
+	// if os.Getenv("DEBUG_API_RESPONSES") == "true" {
+	// 	log.Printf("API Response (status %d, length %d): %s", resp.StatusCode, len(respBody), string(respBody))
+	// }
 
-	var apiResp APIResponse
-	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		// Provide more context in error message
-		return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
-			resp.StatusCode, len(respBody), err)
-	}
-
-	// Check if the response is valid
-	if !apiResp.Success && apiResp.Error == nil && apiResp.Data == nil {
-		return nil, fmt.Errorf("invalid API response: missing success, error, and data fields")
-	}
-
-	if !apiResp.Success {
-		errorMsg := "unknown error"
-		if apiResp.Error != nil {
-			errorMsg = fmt.Sprintf("%s: %s", apiResp.Error.Code, apiResp.Error.Message)
-			if apiResp.Error.Details != "" {
-				errorMsg += " - " + apiResp.Error.Details
-			}
-		}
-		return nil, fmt.Errorf("API error: %s", errorMsg)
-	}
-
-	return &apiResp, nil
+	return parseAPIResponse(respBody, resp.StatusCode)
 }
 
 // makeMultipartRequest makes a multipart form request for file uploads
@@ -194,37 +235,13 @@ func (c *Client) makeMultipartRequest(ctx context.Context, endpoint, filename st
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Add debug logging for response (helpful for troubleshooting)
-	if len(respBody) > 1000 {
-		fmt.Printf("DEBUG: Response body (truncated): %s...\n", string(respBody[:1000]))
-	} else {
-		fmt.Printf("DEBUG: Response body: %s\n", string(respBody))
-	}
+	// Debug logging can be enabled via environment variable DEBUG_API_RESPONSES=true
+	// Note: Avoid using fmt.Printf in production code
+	// if os.Getenv("DEBUG_API_RESPONSES") == "true" {
+	// 	log.Printf("API Response (status %d, length %d): %s", resp.StatusCode, len(respBody), string(respBody))
+	// }
 
-	var apiResp APIResponse
-	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		// Provide more context in error message
-		return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
-			resp.StatusCode, len(respBody), err)
-	}
-
-	// Check if the response is valid
-	if !apiResp.Success && apiResp.Error == nil && apiResp.Data == nil {
-		return nil, fmt.Errorf("invalid API response: missing success, error, and data fields")
-	}
-
-	if !apiResp.Success {
-		errorMsg := "unknown error"
-		if apiResp.Error != nil {
-			errorMsg = fmt.Sprintf("%s: %s", apiResp.Error.Code, apiResp.Error.Message)
-			if apiResp.Error.Details != "" {
-				errorMsg += " - " + apiResp.Error.Details
-			}
-		}
-		return nil, fmt.Errorf("API error: %s", errorMsg)
-	}
-
-	return &apiResp, nil
+	return parseAPIResponse(respBody, resp.StatusCode)
 }
 
 // Search searches content in a LocalRecall collection
@@ -280,184 +297,111 @@ func (c *Client) Search(ctx context.Context, collectionName, query string, maxRe
 
 // CreateCollection creates a new collection
 func (c *Client) CreateCollection(ctx context.Context, name string) (*CollectionInfo, error) {
-	requestBody := map[string]interface{}{
-		"name": name,
-	}
-
-	apiResp, err := c.makeRequest(ctx, "POST", "/api/collections", requestBody)
+	resp, err := c.makeRequest(ctx, "POST", "/api/collections", map[string]interface{}{"name": name})
 	if err != nil {
 		return nil, err
 	}
 
-	// Extract data from response
-	data, ok := apiResp.Data.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response data format")
-	}
-
-	createdAt := ""
-	if createdAtVal, ok := data["created_at"].(string); ok {
-		createdAt = createdAtVal
+	data, err := getDataMap(resp)
+	if err != nil {
+		return nil, err
 	}
 
 	return &CollectionInfo{
 		Name:      name,
-		CreatedAt: createdAt,
+		CreatedAt: getStringField(data, "created_at"),
 	}, nil
 }
 
 // ResetCollection resets (clears) a collection
 func (c *Client) ResetCollection(ctx context.Context, name string) (*CollectionInfo, error) {
-	apiResp, err := c.makeRequest(ctx, "POST", fmt.Sprintf("/api/collections/%s/reset", name), nil)
+	resp, err := c.makeRequest(ctx, "POST", fmt.Sprintf("/api/collections/%s/reset", name), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Extract data from response
-	data, ok := apiResp.Data.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response data format")
-	}
-
-	resetAt := ""
-	if resetAtVal, ok := data["reset_at"].(string); ok {
-		resetAt = resetAtVal
+	data, err := getDataMap(resp)
+	if err != nil {
+		return nil, err
 	}
 
 	return &CollectionInfo{
 		Name:    name,
-		ResetAt: resetAt,
+		ResetAt: getStringField(data, "reset_at"),
 	}, nil
 }
 
 // AddDocument adds a document to a collection
 func (c *Client) AddDocument(ctx context.Context, collectionName, filename string, fileContent []byte) (*DocumentInfo, error) {
-	apiResp, err := c.makeMultipartRequest(ctx, fmt.Sprintf("/api/collections/%s/upload", collectionName), filename, fileContent)
+	resp, err := c.makeMultipartRequest(ctx, fmt.Sprintf("/api/collections/%s/upload", collectionName), filename, fileContent)
 	if err != nil {
 		return nil, err
 	}
 
-	// Extract data from response
-	data, ok := apiResp.Data.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response data format")
-	}
-
-	uploadedAt := ""
-	if uploadedAtVal, ok := data["uploaded_at"].(string); ok {
-		uploadedAt = uploadedAtVal
+	data, err := getDataMap(resp)
+	if err != nil {
+		return nil, err
 	}
 
 	return &DocumentInfo{
 		Filename:   filename,
 		Collection: collectionName,
-		UploadedAt: uploadedAt,
+		UploadedAt: getStringField(data, "uploaded_at"),
 	}, nil
 }
 
 // ListCollections lists all collections
 func (c *Client) ListCollections(ctx context.Context) (*CollectionsList, error) {
-	apiResp, err := c.makeRequest(ctx, "GET", "/api/collections", nil)
+	resp, err := c.makeRequest(ctx, "GET", "/api/collections", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Extract data from response
-	data, ok := apiResp.Data.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response data format")
-	}
-
-	collections := []string{}
-	if collectionsData, ok := data["collections"].([]interface{}); ok {
-		for _, c := range collectionsData {
-			if col, ok := c.(string); ok {
-				collections = append(collections, col)
-			}
-		}
-	}
-
-	count := 0
-	if countVal, ok := data["count"].(float64); ok {
-		count = int(countVal)
+	data, err := getDataMap(resp)
+	if err != nil {
+		return nil, err
 	}
 
 	return &CollectionsList{
-		Collections: collections,
-		Count:       count,
+		Collections: getStringArray(data, "collections"),
+		Count:       getIntField(data, "count"),
 	}, nil
 }
 
 // ListFiles lists files in a collection
 func (c *Client) ListFiles(ctx context.Context, collectionName string) (*FilesList, error) {
-	apiResp, err := c.makeRequest(ctx, "GET", fmt.Sprintf("/api/collections/%s/entries", collectionName), nil)
+	resp, err := c.makeRequest(ctx, "GET", fmt.Sprintf("/api/collections/%s/entries", collectionName), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Extract data from response
-	data, ok := apiResp.Data.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response data format")
-	}
-
-	entries := []string{}
-	if entriesData, ok := data["entries"].([]interface{}); ok {
-		for _, e := range entriesData {
-			if entry, ok := e.(string); ok {
-				entries = append(entries, entry)
-			}
-		}
-	}
-
-	count := 0
-	if countVal, ok := data["count"].(float64); ok {
-		count = int(countVal)
+	data, err := getDataMap(resp)
+	if err != nil {
+		return nil, err
 	}
 
 	return &FilesList{
 		Collection: collectionName,
-		Entries:    entries,
-		Count:      count,
+		Entries:    getStringArray(data, "entries"),
+		Count:      getIntField(data, "count"),
 	}, nil
 }
 
 // DeleteEntry deletes an entry from a collection
 func (c *Client) DeleteEntry(ctx context.Context, collectionName, entry string) (*DeleteResult, error) {
-	requestBody := map[string]interface{}{
-		"entry": entry,
-	}
-
-	apiResp, err := c.makeRequest(ctx, "DELETE", fmt.Sprintf("/api/collections/%s/entry/delete", collectionName), requestBody)
+	resp, err := c.makeRequest(ctx, "DELETE", fmt.Sprintf("/api/collections/%s/entry/delete", collectionName), map[string]interface{}{"entry": entry})
 	if err != nil {
 		return nil, err
 	}
 
-	// Extract data from response
-	data, ok := apiResp.Data.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("unexpected response data format")
-	}
-
-	remainingEntries := []string{}
-	entryCount := 0
-
-	if remainingData, ok := data["remaining_entries"].([]interface{}); ok {
-		for _, e := range remainingData {
-			if entryStr, ok := e.(string); ok {
-				remainingEntries = append(remainingEntries, entryStr)
-			}
-		}
-		entryCount = len(remainingEntries)
-	}
-
-	if countVal, ok := data["entry_count"].(float64); ok {
-		entryCount = int(countVal)
+	data, err := getDataMap(resp)
+	if err != nil {
+		return nil, err
 	}
 
 	return &DeleteResult{
 		DeletedEntry:     entry,
-		RemainingEntries: remainingEntries,
-		EntryCount:       entryCount,
+		RemainingEntries: getStringArray(data, "remaining_entries"),
+		EntryCount:       getIntField(data, "entry_count"),
 	}, nil
 }

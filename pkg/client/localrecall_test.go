@@ -109,7 +109,7 @@ func TestSearch_DefaultMaxResults(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]interface{}
 		json.NewDecoder(r.Body).Decode(&req)
-		
+
 		// Verify default max_results is set to 5
 		if req["max_results"] != float64(5) {
 			t.Errorf("Expected default max_results 5, got %v", req["max_results"])
@@ -414,7 +414,7 @@ func TestClient_ContextCancellation(t *testing.T) {
 func TestClient_NetworkError(t *testing.T) {
 	// Use invalid URL to simulate network error
 	client := NewClient("http://invalid-host-that-does-not-exist:9999", "")
-	
+
 	_, err := client.Search(context.Background(), "test", "query", 5)
 
 	if err == nil {
