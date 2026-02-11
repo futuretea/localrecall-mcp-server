@@ -4,9 +4,9 @@ FROM golang:1.24-alpine AS builder
 # Install build dependencies
 RUN apk add --no-cache git make
 
-WORKDIR /workspace
+WORKDIR /build
 
-# Copy go mod files
+# Copy go mod files first for better caching
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -14,10 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-s -w" \
-    -o localrecall-mcp-server \
-    ./cmd/localrecall-mcp-server
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o localrecall-mcp-server ./cmd/localrecall-mcp-server
 
 # Runtime stage
 FROM alpine:latest
@@ -28,7 +25,7 @@ RUN apk --no-cache add ca-certificates
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /workspace/localrecall-mcp-server .
+COPY --from=builder /build/localrecall-mcp-server .
 
 # Create non-root user
 RUN addgroup -g 1000 app && \
