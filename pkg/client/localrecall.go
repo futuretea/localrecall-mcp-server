@@ -130,21 +130,9 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body 
 
 	var apiResp APIResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		// If parsing as APIResponse fails, try to parse as raw data
-		// Some LocalRecall versions/endpoints return raw arrays or objects directly
-		var rawData interface{}
-		if err2 := json.Unmarshal(respBody, &rawData); err2 == nil {
-			// Wrap raw data in APIResponse format
-			apiResp = APIResponse{
-				Success: true,
-				Data:    rawData,
-			}
-			fmt.Printf("DEBUG: Wrapped raw response data in APIResponse format\n")
-		} else {
-			// Both parsing attempts failed
-			return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
-				resp.StatusCode, len(respBody), err)
-		}
+		// Provide more context in error message
+		return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
+			resp.StatusCode, len(respBody), err)
 	}
 
 	// Check if the response is valid
@@ -215,21 +203,9 @@ func (c *Client) makeMultipartRequest(ctx context.Context, endpoint, filename st
 
 	var apiResp APIResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		// If parsing as APIResponse fails, try to parse as raw data
-		// Some LocalRecall versions/endpoints return raw arrays or objects directly
-		var rawData interface{}
-		if err2 := json.Unmarshal(respBody, &rawData); err2 == nil {
-			// Wrap raw data in APIResponse format
-			apiResp = APIResponse{
-				Success: true,
-				Data:    rawData,
-			}
-			fmt.Printf("DEBUG: Wrapped raw response data in APIResponse format\n")
-		} else {
-			// Both parsing attempts failed
-			return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
-				resp.StatusCode, len(respBody), err)
-		}
+		// Provide more context in error message
+		return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
+			resp.StatusCode, len(respBody), err)
 	}
 
 	// Check if the response is valid
@@ -262,48 +238,43 @@ func (c *Client) Search(ctx context.Context, collectionName, query string, maxRe
 		"max_results": maxResults,
 	}
 
-	apiResp, err := c.makeRequest(ctx, "POST", fmt.Sprintf("/api/collections/%s/search", collectionName), requestBody)
+	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
-	// Handle two possible response formats:
-	// 1. Standard APIResponse with data.results: {success: true, data: {results: [...], count: N}}
-	// 2. Raw array response (wrapped by makeRequest): {success: true, data: [...]}
-	results := []map[string]interface{}{}
-	count := 0
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+fmt.Sprintf("/api/collections/%s/search", collectionName), bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 
-	// Try to extract as standard format first
-	if data, ok := apiResp.Data.(map[string]interface{}); ok {
-		// Standard format: data.results
-		if resultsData, ok := data["results"].([]interface{}); ok {
-			for _, r := range resultsData {
-				if resultMap, ok := r.(map[string]interface{}); ok {
-					results = append(results, resultMap)
-				}
-			}
-		}
-		if countVal, ok := data["count"].(float64); ok {
-			count = int(countVal)
-		}
-	} else if resultsArray, ok := apiResp.Data.([]interface{}); ok {
-		// Raw array format (some LocalRecall versions return this)
-		fmt.Printf("DEBUG: Processing raw array response\n")
-		for _, r := range resultsArray {
-			if resultMap, ok := r.(map[string]interface{}); ok {
-				results = append(results, resultMap)
-			}
-		}
-		count = len(results)
-	} else {
-		return nil, fmt.Errorf("unexpected response data format: %T", apiResp.Data)
+	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("search failed with status: %d", resp.StatusCode)
+	}
+
+	// LocalRecall returns raw array of results directly (not wrapped in APIResponse)
+	// This matches the behavior of LocalRecall's official Go client
+	var rawResults []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&rawResults); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	return &SearchResult{
 		Query:      query,
 		MaxResults: maxResults,
-		Results:    results,
-		Count:      count,
+		Results:    rawResults,
+		Count:      len(rawResults),
 	}, nil
 }
 
