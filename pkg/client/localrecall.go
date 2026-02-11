@@ -121,9 +121,23 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body 
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	// Add debug logging for response (helpful for troubleshooting)
+	if len(respBody) > 1000 {
+		fmt.Printf("DEBUG: Response body (truncated): %s...\n", string(respBody[:1000]))
+	} else {
+		fmt.Printf("DEBUG: Response body: %s\n", string(respBody))
+	}
+
 	var apiResp APIResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+		// Provide more context in error message
+		return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
+			resp.StatusCode, len(respBody), err)
+	}
+
+	// Check if the response is valid
+	if !apiResp.Success && apiResp.Error == nil && apiResp.Data == nil {
+		return nil, fmt.Errorf("invalid API response: missing success, error, and data fields")
 	}
 
 	if !apiResp.Success {
@@ -180,9 +194,23 @@ func (c *Client) makeMultipartRequest(ctx context.Context, endpoint, filename st
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	// Add debug logging for response (helpful for troubleshooting)
+	if len(respBody) > 1000 {
+		fmt.Printf("DEBUG: Response body (truncated): %s...\n", string(respBody[:1000]))
+	} else {
+		fmt.Printf("DEBUG: Response body: %s\n", string(respBody))
+	}
+
 	var apiResp APIResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+		// Provide more context in error message
+		return nil, fmt.Errorf("failed to parse response (status: %d, body length: %d): %w",
+			resp.StatusCode, len(respBody), err)
+	}
+
+	// Check if the response is valid
+	if !apiResp.Success && apiResp.Error == nil && apiResp.Data == nil {
+		return nil, fmt.Errorf("invalid API response: missing success, error, and data fields")
 	}
 
 	if !apiResp.Success {
