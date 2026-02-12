@@ -122,6 +122,89 @@ func (t *Toolset) GetTools(client interface{}) []toolset.ServerTool {
 				},
 				Handler: DeleteEntryHandler,
 			},
+			toolset.ServerTool{
+				Tool: mcp.Tool{
+					Name:        "get_entry_content",
+					Description: "Get the content of a specific entry in LocalRecall collection '" + t.DefaultCollection + "'",
+					InputSchema: mcp.ToolInputSchema{
+						Type: "object",
+						Properties: map[string]interface{}{
+							"entry": map[string]interface{}{
+								"type":        "string",
+								"description": "The filename of the entry to retrieve",
+							},
+							"collection_name": map[string]interface{}{
+								"type":        "string",
+								"description": "Optional: override the default collection",
+							},
+						},
+						Required: []string{"entry"},
+					},
+				},
+				Handler: GetEntryContentHandler,
+			},
+			toolset.ServerTool{
+				Tool: mcp.Tool{
+					Name:        "register_source",
+					Description: "Register an external source for LocalRecall collection '" + t.DefaultCollection + "'",
+					InputSchema: mcp.ToolInputSchema{
+						Type: "object",
+						Properties: map[string]interface{}{
+							"url": map[string]interface{}{
+								"type":        "string",
+								"description": "The URL of the external source",
+							},
+							"update_interval": map[string]interface{}{
+								"type":        "number",
+								"description": "Update interval in seconds (0 or omit for no auto-update)",
+							},
+							"collection_name": map[string]interface{}{
+								"type":        "string",
+								"description": "Optional: override the default collection",
+							},
+						},
+						Required: []string{"url"},
+					},
+				},
+				Handler: RegisterSourceHandler,
+			},
+			toolset.ServerTool{
+				Tool: mcp.Tool{
+					Name:        "remove_source",
+					Description: "Remove an external source from LocalRecall collection '" + t.DefaultCollection + "'",
+					InputSchema: mcp.ToolInputSchema{
+						Type: "object",
+						Properties: map[string]interface{}{
+							"url": map[string]interface{}{
+								"type":        "string",
+								"description": "The URL of the external source to remove",
+							},
+							"collection_name": map[string]interface{}{
+								"type":        "string",
+								"description": "Optional: override the default collection",
+							},
+						},
+						Required: []string{"url"},
+					},
+				},
+				Handler: RemoveSourceHandler,
+			},
+			toolset.ServerTool{
+				Tool: mcp.Tool{
+					Name:        "list_sources",
+					Description: "List external sources for LocalRecall collection '" + t.DefaultCollection + "'",
+					InputSchema: mcp.ToolInputSchema{
+						Type: "object",
+						Properties: map[string]interface{}{
+							"collection_name": map[string]interface{}{
+								"type":        "string",
+								"description": "Optional: override the default collection",
+							},
+						},
+					},
+				},
+				Handler: ListSourcesHandler,
+			},
 		)
 	} else {
 		// Tools without default collection - collection_name is required
@@ -217,6 +300,90 @@ func (t *Toolset) GetTools(client interface{}) []toolset.ServerTool {
 					},
 				},
 				Handler: DeleteEntryHandler,
+			},
+			toolset.ServerTool{
+				Tool: mcp.Tool{
+					Name:        "get_entry_content",
+					Description: "Get the content of a specific entry in a LocalRecall collection",
+					InputSchema: mcp.ToolInputSchema{
+						Type: "object",
+						Properties: map[string]interface{}{
+							"collection_name": map[string]interface{}{
+								"type":        "string",
+								"description": "The name of the collection",
+							},
+							"entry": map[string]interface{}{
+								"type":        "string",
+								"description": "The filename of the entry to retrieve",
+							},
+						},
+						Required: []string{"collection_name", "entry"},
+					},
+				},
+				Handler: GetEntryContentHandler,
+			},
+			toolset.ServerTool{
+				Tool: mcp.Tool{
+					Name:        "register_source",
+					Description: "Register an external source for a LocalRecall collection",
+					InputSchema: mcp.ToolInputSchema{
+						Type: "object",
+						Properties: map[string]interface{}{
+							"collection_name": map[string]interface{}{
+								"type":        "string",
+								"description": "The name of the collection",
+							},
+							"url": map[string]interface{}{
+								"type":        "string",
+								"description": "The URL of the external source",
+							},
+							"update_interval": map[string]interface{}{
+								"type":        "number",
+								"description": "Update interval in seconds (0 or omit for no auto-update)",
+							},
+						},
+						Required: []string{"collection_name", "url"},
+					},
+				},
+				Handler: RegisterSourceHandler,
+			},
+			toolset.ServerTool{
+				Tool: mcp.Tool{
+					Name:        "remove_source",
+					Description: "Remove an external source from a LocalRecall collection",
+					InputSchema: mcp.ToolInputSchema{
+						Type: "object",
+						Properties: map[string]interface{}{
+							"collection_name": map[string]interface{}{
+								"type":        "string",
+								"description": "The name of the collection",
+							},
+							"url": map[string]interface{}{
+								"type":        "string",
+								"description": "The URL of the external source to remove",
+							},
+						},
+						Required: []string{"collection_name", "url"},
+					},
+				},
+				Handler: RemoveSourceHandler,
+			},
+			toolset.ServerTool{
+				Tool: mcp.Tool{
+					Name:        "list_sources",
+					Description: "List external sources for a LocalRecall collection",
+					InputSchema: mcp.ToolInputSchema{
+						Type: "object",
+						Properties: map[string]interface{}{
+							"collection_name": map[string]interface{}{
+								"type":        "string",
+								"description": "The name of the collection",
+							},
+						},
+						Required: []string{"collection_name"},
+					},
+				},
+				Handler: ListSourcesHandler,
 			},
 		)
 	}

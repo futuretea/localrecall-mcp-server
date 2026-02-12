@@ -52,7 +52,7 @@ type CollectionInfo struct {
 type DocumentInfo struct {
 	Filename   string `json:"filename"`
 	Collection string `json:"collection"`
-	UploadedAt string `json:"uploaded_at,omitempty"`
+	CreatedAt  string `json:"created_at,omitempty"`
 }
 
 // CollectionsList represents a list of collections
@@ -73,6 +73,28 @@ type DeleteResult struct {
 	DeletedEntry     string   `json:"deleted_entry"`
 	RemainingEntries []string `json:"remaining_entries"`
 	EntryCount       int      `json:"entry_count"`
+}
+
+// EntryContent represents the content of a specific entry
+type EntryContent struct {
+	Collection string `json:"collection"`
+	Entry      string `json:"entry"`
+	Content    string `json:"content"`
+	ChunkCount int    `json:"chunk_count"`
+}
+
+// SourceInfo represents an external source
+type SourceInfo struct {
+	Collection     string `json:"collection"`
+	URL            string `json:"url"`
+	UpdateInterval int    `json:"update_interval"`
+}
+
+// SourcesList represents a list of external sources
+type SourcesList struct {
+	Collection string                   `json:"collection"`
+	Sources    []map[string]interface{} `json:"sources"`
+	Count      int                      `json:"count"`
 }
 
 // NewClient creates a new LocalRecall API client
@@ -250,48 +272,36 @@ func (c *Client) Search(ctx context.Context, collectionName, query string, maxRe
 		maxResults = 5
 	}
 
-	requestBody := map[string]interface{}{
+	resp, err := c.makeRequest(ctx, "POST", fmt.Sprintf("/api/collections/%s/search", collectionName), map[string]interface{}{
 		"query":       query,
 		"max_results": maxResults,
-	}
-
-	jsonData, err := json.Marshal(requestBody)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request body: %w", err)
+		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+fmt.Sprintf("/api/collections/%s/search", collectionName), bytes.NewBuffer(jsonData))
+	data, err := getDataMap(resp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("search failed with status: %d", resp.StatusCode)
-	}
-
-	// LocalRecall returns raw array of results directly (not wrapped in APIResponse)
-	// This matches the behavior of LocalRecall's official Go client
-	var rawResults []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&rawResults); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	// Extract results array from data
+	var results []map[string]interface{}
+	if rawResults, ok := data["results"]; ok {
+		if arr, ok := rawResults.([]interface{}); ok {
+			for _, item := range arr {
+				if m, ok := item.(map[string]interface{}); ok {
+					results = append(results, m)
+				}
+			}
+		}
 	}
 
 	return &SearchResult{
-		Query:      query,
-		MaxResults: maxResults,
-		Results:    rawResults,
-		Count:      len(rawResults),
+		Query:      getStringField(data, "query"),
+		MaxResults: getIntField(data, "max_results"),
+		Results:    results,
+		Count:      getIntField(data, "count"),
 	}, nil
 }
 
@@ -346,7 +356,27 @@ func (c *Client) AddDocument(ctx context.Context, collectionName, filename strin
 	return &DocumentInfo{
 		Filename:   filename,
 		Collection: collectionName,
-		UploadedAt: getStringField(data, "uploaded_at"),
+		CreatedAt:  getStringField(data, "created_at"),
+	}, nil
+}
+
+// GetEntryContent gets the content of a specific entry in a collection
+func (c *Client) GetEntryContent(ctx context.Context, collectionName, entry string) (*EntryContent, error) {
+	resp, err := c.makeRequest(ctx, "GET", fmt.Sprintf("/api/collections/%s/entries/%s", collectionName, entry), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := getDataMap(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &EntryContent{
+		Collection: getStringField(data, "collection"),
+		Entry:      getStringField(data, "entry"),
+		Content:    getStringField(data, "content"),
+		ChunkCount: getIntField(data, "chunk_count"),
 	}, nil
 }
 
@@ -403,5 +433,68 @@ func (c *Client) DeleteEntry(ctx context.Context, collectionName, entry string) 
 		DeletedEntry:     entry,
 		RemainingEntries: getStringArray(data, "remaining_entries"),
 		EntryCount:       getIntField(data, "entry_count"),
+	}, nil
+}
+
+// RegisterSource registers an external source for a collection
+func (c *Client) RegisterSource(ctx context.Context, collectionName, sourceURL string, updateInterval int) (*SourceInfo, error) {
+	body := map[string]interface{}{
+		"url": sourceURL,
+	}
+	if updateInterval > 0 {
+		body["update_interval"] = updateInterval
+	}
+
+	resp, err := c.makeRequest(ctx, "POST", fmt.Sprintf("/api/collections/%s/sources", collectionName), body)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := getDataMap(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SourceInfo{
+		Collection:     getStringField(data, "collection"),
+		URL:            getStringField(data, "url"),
+		UpdateInterval: getIntField(data, "update_interval"),
+	}, nil
+}
+
+// RemoveSource removes an external source from a collection
+func (c *Client) RemoveSource(ctx context.Context, collectionName, sourceURL string) error {
+	_, err := c.makeRequest(ctx, "DELETE", fmt.Sprintf("/api/collections/%s/sources", collectionName), map[string]interface{}{"url": sourceURL})
+	return err
+}
+
+// ListSources lists external sources for a collection
+func (c *Client) ListSources(ctx context.Context, collectionName string) (*SourcesList, error) {
+	resp, err := c.makeRequest(ctx, "GET", fmt.Sprintf("/api/collections/%s/sources", collectionName), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := getDataMap(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract sources array from data
+	var sources []map[string]interface{}
+	if rawSources, ok := data["sources"]; ok {
+		if arr, ok := rawSources.([]interface{}); ok {
+			for _, item := range arr {
+				if m, ok := item.(map[string]interface{}); ok {
+					sources = append(sources, m)
+				}
+			}
+		}
+	}
+
+	return &SourcesList{
+		Collection: getStringField(data, "collection"),
+		Sources:    sources,
+		Count:      getIntField(data, "count"),
 	}, nil
 }

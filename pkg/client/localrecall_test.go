@@ -30,7 +30,7 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestSearch_Success(t *testing.T) {
-	// Mock server that returns raw array (like actual LocalRecall)
+	// Mock server that returns standard APIResponse (matching LocalRecall v0.5.4+)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request
 		if r.Method != "POST" {
@@ -58,23 +58,32 @@ func TestSearch_Success(t *testing.T) {
 			t.Errorf("Expected max_results 5, got %v", req["max_results"])
 		}
 
-		// Return raw array response (matching actual LocalRecall behavior)
-		response := []map[string]interface{}{
-			{
-				"ID":         "1",
-				"Content":    "Test content 1",
-				"Similarity": 0.9,
-				"Metadata": map[string]string{
-					"source": "test.md",
+		// Return standard APIResponse (matching LocalRecall v0.5.4+)
+		response := APIResponse{
+			Success: true,
+			Message: "Search completed successfully",
+			Data: map[string]interface{}{
+				"query":       "test query",
+				"max_results": 5,
+				"results": []map[string]interface{}{
+					{
+						"ID":         "1",
+						"Content":    "Test content 1",
+						"Similarity": 0.9,
+						"Metadata": map[string]string{
+							"source": "test.md",
+						},
+					},
+					{
+						"ID":         "2",
+						"Content":    "Test content 2",
+						"Similarity": 0.8,
+						"Metadata": map[string]string{
+							"source": "test2.md",
+						},
+					},
 				},
-			},
-			{
-				"ID":         "2",
-				"Content":    "Test content 2",
-				"Similarity": 0.8,
-				"Metadata": map[string]string{
-					"source": "test2.md",
-				},
+				"count": 2,
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -109,14 +118,23 @@ func TestSearch_DefaultMaxResults(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]interface{}
 		json.NewDecoder(r.Body).Decode(&req)
-		
+
 		// Verify default max_results is set to 5
 		if req["max_results"] != float64(5) {
 			t.Errorf("Expected default max_results 5, got %v", req["max_results"])
 		}
 
+		response := APIResponse{
+			Success: true,
+			Data: map[string]interface{}{
+				"query":       "query",
+				"max_results": 5,
+				"results":     []map[string]interface{}{},
+				"count":       0,
+			},
+		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]interface{}{})
+		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -130,8 +148,16 @@ func TestSearch_DefaultMaxResults(t *testing.T) {
 
 func TestSearch_ErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := APIResponse{
+			Success: false,
+			Error: &APIError{
+				Code:    "NOT_FOUND",
+				Message: "Collection not found",
+				Details: "Collection 'nonexistent' does not exist",
+			},
+		}
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Collection not found"))
+		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -140,9 +166,6 @@ func TestSearch_ErrorResponse(t *testing.T) {
 
 	if err == nil {
 		t.Error("Expected error for 404 response")
-	}
-	if err.Error() != "search failed with status: 404" {
-		t.Errorf("Unexpected error message: %v", err)
 	}
 }
 
@@ -414,7 +437,7 @@ func TestClient_ContextCancellation(t *testing.T) {
 func TestClient_NetworkError(t *testing.T) {
 	// Use invalid URL to simulate network error
 	client := NewClient("http://invalid-host-that-does-not-exist:9999", "")
-	
+
 	_, err := client.Search(context.Background(), "test", "query", 5)
 
 	if err == nil {

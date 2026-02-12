@@ -208,3 +208,114 @@ func DeleteEntryHandler(clientInterface interface{}, params map[string]interface
 	// Format output
 	return handler.FormatOutput(result, format)
 }
+
+// GetEntryContentHandler handles get entry content requests
+func GetEntryContentHandler(clientInterface interface{}, params map[string]interface{}) (string, error) {
+	client, ok := clientInterface.(*toolset.LocalRecallClient)
+	if !ok {
+		return "", fmt.Errorf("invalid client type")
+	}
+
+	// Extract parameters
+	collectionName := handler.GetStringParam(params, "collection_name", "")
+
+	entry, err := handler.RequireStringParam(params, "entry")
+	if err != nil {
+		return "", err
+	}
+
+	format := handler.GetStringParam(params, "format", "json")
+
+	// Call API
+	ctx := context.Background()
+	result, err := client.Client.GetEntryContent(ctx, collectionName, entry)
+	if err != nil {
+		return "", fmt.Errorf("get entry content failed: %w", err)
+	}
+
+	// Format output
+	return handler.FormatOutput(result, format)
+}
+
+// RegisterSourceHandler handles register external source requests
+func RegisterSourceHandler(clientInterface interface{}, params map[string]interface{}) (string, error) {
+	client, ok := clientInterface.(*toolset.LocalRecallClient)
+	if !ok {
+		return "", fmt.Errorf("invalid client type")
+	}
+
+	// Extract parameters
+	collectionName := handler.GetStringParam(params, "collection_name", "")
+
+	sourceURL, err := handler.RequireStringParam(params, "url")
+	if err != nil {
+		return "", err
+	}
+
+	updateInterval := handler.GetIntParam(params, "update_interval", 0)
+	format := handler.GetStringParam(params, "format", "json")
+
+	// Call API
+	ctx := context.Background()
+	result, err := client.Client.RegisterSource(ctx, collectionName, sourceURL, updateInterval)
+	if err != nil {
+		return "", fmt.Errorf("register source failed: %w", err)
+	}
+
+	// Format output
+	return handler.FormatOutput(result, format)
+}
+
+// RemoveSourceHandler handles remove external source requests
+func RemoveSourceHandler(clientInterface interface{}, params map[string]interface{}) (string, error) {
+	client, ok := clientInterface.(*toolset.LocalRecallClient)
+	if !ok {
+		return "", fmt.Errorf("invalid client type")
+	}
+
+	// Extract parameters
+	collectionName := handler.GetStringParam(params, "collection_name", "")
+
+	sourceURL, err := handler.RequireStringParam(params, "url")
+	if err != nil {
+		return "", err
+	}
+
+	// Call API
+	ctx := context.Background()
+	if err := client.Client.RemoveSource(ctx, collectionName, sourceURL); err != nil {
+		return "", fmt.Errorf("remove source failed: %w", err)
+	}
+
+	// Return success message
+	result := map[string]interface{}{
+		"collection": collectionName,
+		"url":        sourceURL,
+		"removed":    true,
+	}
+
+	format := handler.GetStringParam(params, "format", "json")
+	return handler.FormatOutput(result, format)
+}
+
+// ListSourcesHandler handles list external sources requests
+func ListSourcesHandler(clientInterface interface{}, params map[string]interface{}) (string, error) {
+	client, ok := clientInterface.(*toolset.LocalRecallClient)
+	if !ok {
+		return "", fmt.Errorf("invalid client type")
+	}
+
+	// Extract parameters
+	collectionName := handler.GetStringParam(params, "collection_name", "")
+	format := handler.GetStringParam(params, "format", "json")
+
+	// Call API
+	ctx := context.Background()
+	result, err := client.Client.ListSources(ctx, collectionName)
+	if err != nil {
+		return "", fmt.Errorf("list sources failed: %w", err)
+	}
+
+	// Format output
+	return handler.FormatOutput(result, format)
+}
