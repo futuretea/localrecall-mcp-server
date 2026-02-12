@@ -35,6 +35,51 @@ func GetIntParam(params map[string]interface{}, key string, defaultValue int) in
 	return defaultValue
 }
 
+// GetFloat64Param extracts a float64 parameter from the params map
+func GetFloat64Param(params map[string]interface{}, key string, defaultValue float64) float64 {
+	if val, ok := params[key]; ok {
+		switch v := val.(type) {
+		case float64:
+			return v
+		case float32:
+			return float64(v)
+		case int:
+			return float64(v)
+		case int64:
+			return float64(v)
+		case string:
+			var f float64
+			if _, err := fmt.Sscanf(v, "%f", &f); err == nil {
+				return f
+			}
+		}
+	}
+	return defaultValue
+}
+
+// GetStringMapParam extracts a map[string]string parameter from the params map.
+// JSON objects with string values are accepted.
+func GetStringMapParam(params map[string]interface{}, key string) map[string]string {
+	val, ok := params[key]
+	if !ok {
+		return nil
+	}
+	raw, ok := val.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	result := make(map[string]string, len(raw))
+	for k, v := range raw {
+		if s, ok := v.(string); ok {
+			result[k] = s
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
 // RequireStringParam extracts a required string parameter
 func RequireStringParam(params map[string]interface{}, key string) (string, error) {
 	val, ok := params[key]

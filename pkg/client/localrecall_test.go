@@ -146,6 +146,91 @@ func TestSearch_DefaultMaxResults(t *testing.T) {
 	}
 }
 
+func TestSearchWithOptions_MinSimilarityAndFilters(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		// Verify min_similarity is sent
+		if req["min_similarity"] != 0.7 {
+			t.Errorf("Expected min_similarity 0.7, got %v", req["min_similarity"])
+		}
+
+		// Verify filters are sent
+		filters, ok := req["filters"].(map[string]interface{})
+		if !ok {
+			t.Fatal("Expected filters as map")
+		}
+		if filters["source"] != "docs.md" {
+			t.Errorf("Expected filter source=docs.md, got %v", filters["source"])
+		}
+
+		response := APIResponse{
+			Success: true,
+			Data: map[string]interface{}{
+				"query":          "test",
+				"max_results":    5,
+				"min_similarity": 0.7,
+				"results": []map[string]interface{}{
+					{"ID": "1", "Content": "Matched", "Similarity": 0.9},
+				},
+				"count": 1,
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	result, err := client.SearchWithOptions(context.Background(), "col", "test", 5, &SearchOptions{
+		MinSimilarity: 0.7,
+		Filters:       map[string]string{"source": "docs.md"},
+	})
+	if err != nil {
+		t.Fatalf("SearchWithOptions failed: %v", err)
+	}
+	if result.Count != 1 {
+		t.Errorf("Expected count 1, got %d", result.Count)
+	}
+}
+
+func TestSearchWithOptions_NilOpts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&req)
+
+		// Verify no extra fields when opts is nil
+		if _, exists := req["min_similarity"]; exists {
+			t.Error("min_similarity should not be present when opts is nil")
+		}
+		if _, exists := req["filters"]; exists {
+			t.Error("filters should not be present when opts is nil")
+		}
+
+		response := APIResponse{
+			Success: true,
+			Data: map[string]interface{}{
+				"query":       "query",
+				"max_results": 5,
+				"results":     []map[string]interface{}{},
+				"count":       0,
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "")
+	_, err := client.SearchWithOptions(context.Background(), "test", "query", 5, nil)
+	if err != nil {
+		t.Fatalf("SearchWithOptions with nil opts failed: %v", err)
+	}
+}
+
 func TestSearch_ErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := APIResponse{

@@ -85,8 +85,16 @@ func (t *Toolset) GetTools(client interface{}) []toolset.ServerTool {
 			descGeneric: "Search content in a LocalRecall collection",
 			handler:     SearchHandler,
 			props: map[string]interface{}{
-				"query":       prop("string", "The search query"),
-				"max_results": prop("number", "Maximum number of results to return (default: 5)"),
+				"query":          prop("string", "The search query"),
+				"max_results":    prop("number", "Maximum number of results to return (default: 5)"),
+				"min_similarity": prop("number", "Minimum cosine similarity threshold (0-1). Results below this score are filtered out. 0 or omit to disable."),
+				"filters": map[string]interface{}{
+					"type":        "object",
+					"description": "Metadata key-value filters. Only results whose metadata contains all specified key-value pairs are returned.",
+					"additionalProperties": map[string]interface{}{
+						"type": "string",
+					},
+				},
 			},
 			required: []string{"query"},
 		},

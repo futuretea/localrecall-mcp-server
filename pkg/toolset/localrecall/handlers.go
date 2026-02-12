@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	lrclient "github.com/futuretea/localrecall-mcp-server/pkg/client"
 	"github.com/futuretea/localrecall-mcp-server/pkg/toolset"
 	"github.com/futuretea/localrecall-mcp-server/pkg/toolset/handler"
 )
@@ -33,7 +34,17 @@ func SearchHandler(clientInterface interface{}, params map[string]interface{}) (
 	maxResults := handler.GetIntParam(params, "max_results", 5)
 	format := handler.GetStringParam(params, "format", "json")
 
-	result, err := client.Client.Search(context.Background(), collectionName, query, maxResults)
+	var opts *lrclient.SearchOptions
+	minSim := handler.GetFloat64Param(params, "min_similarity", 0)
+	filters := handler.GetStringMapParam(params, "filters")
+	if minSim > 0 || len(filters) > 0 {
+		opts = &lrclient.SearchOptions{
+			MinSimilarity: minSim,
+			Filters:       filters,
+		}
+	}
+
+	result, err := client.Client.SearchWithOptions(context.Background(), collectionName, query, maxResults, opts)
 	if err != nil {
 		return "", fmt.Errorf("search failed: %w", err)
 	}

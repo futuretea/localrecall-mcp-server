@@ -35,10 +35,17 @@ type APIError struct {
 
 // SearchResult represents a search result
 type SearchResult struct {
-	Query      string                   `json:"query"`
-	MaxResults int                      `json:"max_results"`
-	Results    []map[string]interface{} `json:"results"`
-	Count      int                      `json:"count"`
+	Query         string                   `json:"query"`
+	MaxResults    int                      `json:"max_results"`
+	MinSimilarity float64                  `json:"min_similarity,omitempty"`
+	Results       []map[string]interface{} `json:"results"`
+	Count         int                      `json:"count"`
+}
+
+// SearchOptions holds optional parameters for search requests.
+type SearchOptions struct {
+	MinSimilarity float64           // minimum cosine similarity threshold (0 = disabled)
+	Filters       map[string]string // metadata key-value filters (nil = no filtering)
 }
 
 // CollectionInfo represents collection information
@@ -267,16 +274,31 @@ func (c *Client) makeMultipartRequest(ctx context.Context, endpoint, filename st
 	return parseAPIResponse(respBody, resp.StatusCode)
 }
 
-// Search searches content in a LocalRecall collection
+// Search searches content in a LocalRecall collection.
 func (c *Client) Search(ctx context.Context, collectionName, query string, maxResults int) (*SearchResult, error) {
+	return c.SearchWithOptions(ctx, collectionName, query, maxResults, nil)
+}
+
+// SearchWithOptions searches content in a LocalRecall collection with optional parameters.
+func (c *Client) SearchWithOptions(ctx context.Context, collectionName, query string, maxResults int, opts *SearchOptions) (*SearchResult, error) {
 	if maxResults == 0 {
 		maxResults = 5
 	}
 
-	resp, err := c.makeRequest(ctx, "POST", fmt.Sprintf("/api/collections/%s/search", collectionName), map[string]interface{}{
+	body := map[string]interface{}{
 		"query":       query,
 		"max_results": maxResults,
-	})
+	}
+	if opts != nil {
+		if opts.MinSimilarity > 0 {
+			body["min_similarity"] = opts.MinSimilarity
+		}
+		if len(opts.Filters) > 0 {
+			body["filters"] = opts.Filters
+		}
+	}
+
+	resp, err := c.makeRequest(ctx, "POST", fmt.Sprintf("/api/collections/%s/search", collectionName), body)
 	if err != nil {
 		return nil, err
 	}
