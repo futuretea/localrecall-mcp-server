@@ -2,9 +2,9 @@ package mcp
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"net/http"
+	"slices"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -37,28 +37,18 @@ type Server struct {
 
 // NewServer creates a new MCP server with the given configuration
 func NewServer(configuration Configuration) (*Server, error) {
-	var serverOptions []server.ServerOption
-
-	// Configure server capabilities
-	serverOptions = append(serverOptions,
+	serverOptions := []server.ServerOption{
 		server.WithResourceCapabilities(true, true),
 		server.WithPromptCapabilities(true),
 		server.WithToolCapabilities(true),
 		server.WithLogging(),
-	)
-
-	// Initialize LocalRecall client
-	var localRecallClient *client.Client
-	if configuration.HasLocalRecallConfig() {
-		localRecallClient = client.NewClient(
-			configuration.LocalRecallURL,
-			configuration.LocalRecallAPIKey,
-		)
-		logging.Info("LocalRecall client initialized with URL: %s", configuration.LocalRecallURL)
-	} else {
-		logging.Warn("LocalRecall configuration not provided, using defaults")
-		localRecallClient = client.NewClient("http://localhost:8080", "")
 	}
+
+	localRecallClient := client.NewClient(
+		configuration.LocalRecallURL,
+		configuration.LocalRecallAPIKey,
+	)
+	logging.Info("LocalRecall client initialized with URL: %s", configuration.LocalRecallURL)
 
 	s := &Server{
 		configuration:     &configuration,
@@ -66,7 +56,6 @@ func NewServer(configuration Configuration) (*Server, error) {
 		localRecallClient: localRecallClient,
 	}
 
-	// Register tools
 	if err := s.registerTools(); err != nil {
 		return nil, err
 	}
@@ -76,29 +65,19 @@ func NewServer(configuration Configuration) (*Server, error) {
 
 // registerTools registers all available tools based on configuration
 func (s *Server) registerTools() error {
-	// Create LocalRecall toolset
 	localrecallTs := &localrecallToolset.Toolset{
 		DefaultCollection: s.configuration.LocalRecallCollection,
 	}
 
-	// Wrap client for toolset
 	wrappedClient := &toolset.LocalRecallClient{
 		Client: s.localRecallClient,
 	}
 
-	// Get all tools from toolset
-	tools := localrecallTs.GetTools(wrappedClient)
-
-	// Register each tool
-	for _, tool := range tools {
-		// Check if tool should be enabled
-		if s.shouldEnableTool(tool.Tool.Name) {
-			// Create a configured tool handler
-			configuredTool := s.configureTool(tool, wrappedClient)
-			if err := s.registerTool(configuredTool, wrappedClient); err != nil {
-				return fmt.Errorf("failed to register tool %s: %w", tool.Tool.Name, err)
-			}
+	for _, tool := range localrecallTs.GetTools(wrappedClient) {
+		if !s.shouldEnableTool(tool.Tool.Name) {
+			continue
 		}
+		s.registerTool(s.configureTool(tool, wrappedClient))
 	}
 
 	logging.Info("MCP server initialized with %d tools", len(s.enabledTools))
@@ -107,25 +86,12 @@ func (s *Server) registerTools() error {
 
 // shouldEnableTool determines if a tool should be enabled based on configuration
 func (s *Server) shouldEnableTool(toolName string) bool {
-	// Check if tool is explicitly disabled
-	for _, disabledTool := range s.configuration.DisabledTools {
-		if disabledTool == toolName {
-			return false
-		}
-	}
-
-	// Check if tool is explicitly enabled
-	if len(s.configuration.EnabledTools) > 0 {
-		for _, enabledTool := range s.configuration.EnabledTools {
-			if enabledTool == toolName {
-				return true
-			}
-		}
-		// If enabled tools are specified and this tool is not in the list, disable it
+	if slices.Contains(s.configuration.DisabledTools, toolName) {
 		return false
 	}
-
-	// Default: enable the tool
+	if len(s.configuration.EnabledTools) > 0 {
+		return slices.Contains(s.configuration.EnabledTools, toolName)
+	}
 	return true
 }
 
@@ -139,11 +105,9 @@ func (s *Server) configureTool(tool toolset.ServerTool, wrappedClient *toolset.L
 				params["format"] = s.configuration.ListOutput
 			}
 
-			// Inject default collection if not specified and available
+			// Enforce collection isolation: always override collection_name
 			if s.configuration.LocalRecallCollection != "" {
-				if _, hasCollection := params["collection_name"]; !hasCollection {
-					params["collection_name"] = s.configuration.LocalRecallCollection
-				}
+				params["collection_name"] = s.configuration.LocalRecallCollection
 			}
 
 			return tool.Handler(wrappedClient, params)
@@ -159,8 +123,8 @@ func contextFunc(ctx context.Context, r *http.Request) context.Context {
 }
 
 // registerTool registers a single tool with the MCP server
-func (s *Server) registerTool(tool toolset.ServerTool, wrappedClient *toolset.LocalRecallClient) error {
-	toolHandler := server.ToolHandlerFunc(func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) registerTool(tool toolset.ServerTool) {
+	s.server.AddTool(tool.Tool, server.ToolHandlerFunc(func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logging.Debug("Tool %s called with params: %v", tool.Tool.Name, request.Params.Arguments)
 
 		params := make(map[string]interface{})
@@ -168,16 +132,11 @@ func (s *Server) registerTool(tool toolset.ServerTool, wrappedClient *toolset.Lo
 			maps.Copy(params, args)
 		}
 
-		result, err := tool.Handler(wrappedClient, params)
+		result, err := tool.Handler(nil, params)
 		return NewTextResult(result, err), nil
-	})
-
-	// Add tool to server
-	s.server.AddTool(tool.Tool, toolHandler)
+	}))
 	s.enabledTools = append(s.enabledTools, tool.Tool.Name)
-
 	logging.Info("Registered tool: %s", tool.Tool.Name)
-	return nil
 }
 
 // ServeStdio starts the MCP server in stdio mode

@@ -19,8 +19,11 @@ localrecall_url: http://localhost:8080
 # LocalRecall API key (optional)
 localrecall_api_key: ""
 
-# Default collection name (optional)
-# If set, collection_name parameter becomes optional for relevant tools
+# Collection isolation (optional)
+# If set, the server is locked to this collection only:
+#   - collection_name parameter is removed from all tools
+#   - create_collection, reset_collection, list_collections tools are hidden
+#   - all operations are forced to use this collection
 localrecall_collection: ""
 
 # Output Configuration

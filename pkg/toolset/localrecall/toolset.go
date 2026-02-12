@@ -54,7 +54,7 @@ func (t *Toolset) buildCollectionTool(def collectionToolDef) toolset.ServerTool 
 
 	if t.DefaultCollection != "" {
 		desc = def.descDefault + " '" + t.DefaultCollection + "'"
-		props["collection_name"] = prop("string", "Optional: override the default collection")
+		// Enforced isolation: do NOT expose collection_name parameter
 	} else {
 		desc = def.descGeneric
 		props["collection_name"] = prop("string", "The name of the collection")
@@ -157,53 +157,55 @@ func (t *Toolset) GetTools(client interface{}) []toolset.ServerTool {
 		},
 	}
 
-	tools := make([]toolset.ServerTool, 0, len(collectionTools)+3)
+	tools := make([]toolset.ServerTool, 0, len(collectionTools))
 	for _, def := range collectionTools {
 		tools = append(tools, t.buildCollectionTool(def))
 	}
 
-	// Collection-independent tools: always the same regardless of default collection
-	tools = append(tools,
-		toolset.ServerTool{
-			Tool: mcp.Tool{
-				Name:        "create_collection",
-				Description: "Create a new collection in LocalRecall",
-				InputSchema: mcp.ToolInputSchema{
-					Type: "object",
-					Properties: map[string]interface{}{
-						"name": prop("string", "The name of the collection to create"),
+	// Collection-independent tools: only available when no collection isolation is configured
+	if t.DefaultCollection == "" {
+		tools = append(tools,
+			toolset.ServerTool{
+				Tool: mcp.Tool{
+					Name:        "create_collection",
+					Description: "Create a new collection in LocalRecall",
+					InputSchema: mcp.ToolInputSchema{
+						Type: "object",
+						Properties: map[string]interface{}{
+							"name": prop("string", "The name of the collection to create"),
+						},
+						Required: []string{"name"},
 					},
-					Required: []string{"name"},
 				},
+				Handler: CreateCollectionHandler,
 			},
-			Handler: CreateCollectionHandler,
-		},
-		toolset.ServerTool{
-			Tool: mcp.Tool{
-				Name:        "reset_collection",
-				Description: "Reset (clear) a collection in LocalRecall",
-				InputSchema: mcp.ToolInputSchema{
-					Type: "object",
-					Properties: map[string]interface{}{
-						"name": prop("string", "The name of the collection to reset"),
+			toolset.ServerTool{
+				Tool: mcp.Tool{
+					Name:        "reset_collection",
+					Description: "Reset (clear) a collection in LocalRecall",
+					InputSchema: mcp.ToolInputSchema{
+						Type: "object",
+						Properties: map[string]interface{}{
+							"name": prop("string", "The name of the collection to reset"),
+						},
+						Required: []string{"name"},
 					},
-					Required: []string{"name"},
 				},
+				Handler: ResetCollectionHandler,
 			},
-			Handler: ResetCollectionHandler,
-		},
-		toolset.ServerTool{
-			Tool: mcp.Tool{
-				Name:        "list_collections",
-				Description: "List all collections in LocalRecall",
-				InputSchema: mcp.ToolInputSchema{
-					Type:       "object",
-					Properties: map[string]interface{}{},
+			toolset.ServerTool{
+				Tool: mcp.Tool{
+					Name:        "list_collections",
+					Description: "List all collections in LocalRecall",
+					InputSchema: mcp.ToolInputSchema{
+						Type:       "object",
+						Properties: map[string]interface{}{},
+					},
 				},
+				Handler: ListCollectionsHandler,
 			},
-			Handler: ListCollectionsHandler,
-		},
-	)
+		)
+	}
 
 	return tools
 }

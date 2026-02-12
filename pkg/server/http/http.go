@@ -33,10 +33,10 @@ func Serve(ctx context.Context, mcpServer *mcp.Server, staticConfig *config.Stat
 	}
 
 	sseServer := mcpServer.ServeSse(staticConfig.SSEBaseURL, httpServer)
-	streamableHttpServer := mcpServer.ServeHTTP(httpServer)
+	streamableHTTPServer := mcpServer.ServeHTTP(httpServer)
 	mux.Handle(sseEndpoint, sseServer)
 	mux.Handle(sseMessageEndpoint, sseServer)
-	mux.Handle(mcpEndpoint, streamableHttpServer)
+	mux.Handle(mcpEndpoint, streamableHTTPServer)
 	mux.HandleFunc(healthEndpoint, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

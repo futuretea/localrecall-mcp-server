@@ -8,7 +8,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for Lo
 - **Knowledge Management**: Full CRUD operations for LocalRecall collections and documents
 - **Search Capabilities**: Semantic search across your knowledge base
 - **Flexible Configuration**: Command-line flags, environment variables, or configuration files
-- **Default Collection**: Optional default collection for simplified tool usage
+- **Collection Isolation**: Lock the server to a single collection for security
 - **Multiple Output Formats**: JSON, YAML output formats
 - **Cross-platform**: Native binaries for Linux, macOS, and Windows
 
@@ -18,7 +18,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for Lo
 |---------|------------------------|------------------|
 | Transport Modes | stdio, HTTP, SSE | stdio only |
 | Configuration | Multiple sources (flags, env, file) | Environment variables only |
-| Default Collection | Supported (optional parameter) | Supported |
+| Collection Isolation | Enforced (hides cross-collection tools) | Default only (can be overridden) |
 | Output Formats | JSON, YAML | JSON only |
 | Tool Control | Enable/disable specific tools | All tools enabled |
 | Architecture | Modular, extensible | Simple, monolithic |
@@ -82,7 +82,7 @@ Configuration can be set via CLI flags, environment variables, or a config file.
 | `--log-level` | Log level (0-9) | `5` |
 | `--localrecall-url` | LocalRecall API URL | `http://localhost:8080` |
 | `--localrecall-api-key` | LocalRecall API key | |
-| `--localrecall-collection` | Default collection name | |
+| `--localrecall-collection` | Collection isolation (locks to this collection) | |
 | `--list-output` | Output format (json, yaml) | `json` |
 | `--output-filters` | Fields to filter from output | |
 | `--enabled-tools` | Tools to enable | |
@@ -99,7 +99,7 @@ log_level: 5
 
 localrecall_url: http://localhost:8080
 localrecall_api_key: your-api-key
-localrecall_collection: my-collection
+localrecall_collection: my-collection  # locks server to this collection
 
 list_output: json
 
@@ -155,7 +155,7 @@ Search content in a LocalRecall collection.
 **Parameters:**
 - `query` (string, required): The search query
 - `max_results` (number, optional): Maximum number of results (default: 5)
-- `collection_name` (string, optional): Collection name (uses default if set)
+- `collection_name` (string, required*): The collection to search
 
 ### add_document
 Add a document to a LocalRecall collection.
@@ -164,22 +164,22 @@ Add a document to a LocalRecall collection.
 - `filename` (string, required): The filename for the document
 - `file_path` (string, optional): Path to file to upload
 - `file_content` (string, optional): File content as string
-- `collection_name` (string, optional): Collection name (uses default if set)
+- `collection_name` (string, required*): The collection to add to
 
 ### create_collection
-Create a new collection in LocalRecall.
+Create a new collection in LocalRecall. **Hidden when collection isolation is active.**
 
 **Parameters:**
 - `name` (string, required): The name of the collection to create
 
 ### reset_collection
-Reset (clear) a collection in LocalRecall.
+Reset (clear) a collection in LocalRecall. **Hidden when collection isolation is active.**
 
 **Parameters:**
 - `name` (string, required): The name of the collection to reset
 
 ### list_collections
-List all collections in LocalRecall.
+List all collections in LocalRecall. **Hidden when collection isolation is active.**
 
 **Parameters:** None
 
@@ -187,14 +187,16 @@ List all collections in LocalRecall.
 List files in a LocalRecall collection.
 
 **Parameters:**
-- `collection_name` (string, optional): Collection name (uses default if set)
+- `collection_name` (string, required*): The collection to list
 
 ### delete_entry
 Delete an entry from a LocalRecall collection.
 
 **Parameters:**
 - `entry` (string, required): The filename of the entry to delete
-- `collection_name` (string, optional): Collection name (uses default if set)
+- `collection_name` (string, required*): The collection to delete from
+
+> **\*** When `--localrecall-collection` is set, `collection_name` is removed from all tool schemas and automatically enforced. The parameter is only required in multi-collection mode.
 
 ## HTTP/SSE Mode
 

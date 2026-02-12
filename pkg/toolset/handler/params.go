@@ -35,16 +35,6 @@ func GetIntParam(params map[string]interface{}, key string, defaultValue int) in
 	return defaultValue
 }
 
-// GetBoolParam extracts a boolean parameter from the params map
-func GetBoolParam(params map[string]interface{}, key string, defaultValue bool) bool {
-	if val, ok := params[key]; ok {
-		if boolVal, ok := val.(bool); ok {
-			return boolVal
-		}
-	}
-	return defaultValue
-}
-
 // RequireStringParam extracts a required string parameter
 func RequireStringParam(params map[string]interface{}, key string) (string, error) {
 	val, ok := params[key]
