@@ -173,6 +173,19 @@ func getIntField(data map[string]interface{}, field string) int {
 	return 0
 }
 
+// getMapArray extracts a []map[string]interface{} from data map
+func getMapArray(data map[string]interface{}, field string) []map[string]interface{} {
+	var result []map[string]interface{}
+	if arr, ok := data[field].([]interface{}); ok {
+		for _, item := range arr {
+			if m, ok := item.(map[string]interface{}); ok {
+				result = append(result, m)
+			}
+		}
+	}
+	return result
+}
+
 // makeRequest makes an HTTP request to the LocalRecall API
 func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body interface{}) (*APIResponse, error) {
 	var reqBody io.Reader
@@ -207,12 +220,6 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body 
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
-
-	// Debug logging can be enabled via environment variable DEBUG_API_RESPONSES=true
-	// Note: Avoid using fmt.Printf in production code
-	// if os.Getenv("DEBUG_API_RESPONSES") == "true" {
-	// 	log.Printf("API Response (status %d, length %d): %s", resp.StatusCode, len(respBody), string(respBody))
-	// }
 
 	return parseAPIResponse(respBody, resp.StatusCode)
 }
@@ -257,12 +264,6 @@ func (c *Client) makeMultipartRequest(ctx context.Context, endpoint, filename st
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Debug logging can be enabled via environment variable DEBUG_API_RESPONSES=true
-	// Note: Avoid using fmt.Printf in production code
-	// if os.Getenv("DEBUG_API_RESPONSES") == "true" {
-	// 	log.Printf("API Response (status %d, length %d): %s", resp.StatusCode, len(respBody), string(respBody))
-	// }
-
 	return parseAPIResponse(respBody, resp.StatusCode)
 }
 
@@ -285,22 +286,10 @@ func (c *Client) Search(ctx context.Context, collectionName, query string, maxRe
 		return nil, err
 	}
 
-	// Extract results array from data
-	var results []map[string]interface{}
-	if rawResults, ok := data["results"]; ok {
-		if arr, ok := rawResults.([]interface{}); ok {
-			for _, item := range arr {
-				if m, ok := item.(map[string]interface{}); ok {
-					results = append(results, m)
-				}
-			}
-		}
-	}
-
 	return &SearchResult{
 		Query:      getStringField(data, "query"),
 		MaxResults: getIntField(data, "max_results"),
-		Results:    results,
+		Results:    getMapArray(data, "results"),
 		Count:      getIntField(data, "count"),
 	}, nil
 }
@@ -480,21 +469,9 @@ func (c *Client) ListSources(ctx context.Context, collectionName string) (*Sourc
 		return nil, err
 	}
 
-	// Extract sources array from data
-	var sources []map[string]interface{}
-	if rawSources, ok := data["sources"]; ok {
-		if arr, ok := rawSources.([]interface{}); ok {
-			for _, item := range arr {
-				if m, ok := item.(map[string]interface{}); ok {
-					sources = append(sources, m)
-				}
-			}
-		}
-	}
-
 	return &SourcesList{
 		Collection: getStringField(data, "collection"),
-		Sources:    sources,
+		Sources:    getMapArray(data, "sources"),
 		Count:      getIntField(data, "count"),
 	}, nil
 }

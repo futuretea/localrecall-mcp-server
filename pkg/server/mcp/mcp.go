@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -162,12 +163,9 @@ func (s *Server) registerTool(tool toolset.ServerTool, wrappedClient *toolset.Lo
 	toolHandler := server.ToolHandlerFunc(func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logging.Debug("Tool %s called with params: %v", tool.Tool.Name, request.Params.Arguments)
 
-		// Convert arguments to the format expected by our tool handlers
 		params := make(map[string]interface{})
-		if arguments, ok := request.Params.Arguments.(map[string]interface{}); ok {
-			for key, value := range arguments {
-				params[key] = value
-			}
+		if args, ok := request.Params.Arguments.(map[string]interface{}); ok {
+			maps.Copy(params, args)
 		}
 
 		result, err := tool.Handler(wrappedClient, params)
@@ -192,9 +190,10 @@ func (s *Server) ServeStdio() error {
 func (s *Server) ServeSse(baseURL string, httpServer *http.Server) *server.SSEServer {
 	logging.Info("Starting MCP server in SSE mode")
 
-	options := make([]server.SSEOption, 0)
-	options = append(options, server.WithHTTPServer(httpServer), server.WithSSEContextFunc(contextFunc))
-
+	options := []server.SSEOption{
+		server.WithHTTPServer(httpServer),
+		server.WithSSEContextFunc(contextFunc),
+	}
 	if baseURL != "" {
 		options = append(options, server.WithBaseURL(baseURL))
 	}

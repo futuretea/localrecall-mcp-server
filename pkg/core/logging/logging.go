@@ -62,38 +62,28 @@ func getZerologLevel(level int) zerolog.Level {
 
 // Info logs an info message
 func Info(format string, v ...interface{}) {
-	if !stdioMode {
-		log.Info().Msgf(format, v...)
-	}
+	log.Info().Msgf(format, v...)
 }
 
 // Warn logs a warning message
 func Warn(format string, v ...interface{}) {
-	if !stdioMode {
-		log.Warn().Msgf(format, v...)
-	}
+	log.Warn().Msgf(format, v...)
 }
 
 // Error logs an error message
 func Error(format string, v ...interface{}) {
-	if !stdioMode {
-		log.Error().Msgf(format, v...)
-	}
+	log.Error().Msgf(format, v...)
 }
 
 // Debug logs a debug message
 func Debug(format string, v ...interface{}) {
-	if !stdioMode {
-		log.Debug().Msgf(format, v...)
-	}
+	log.Debug().Msgf(format, v...)
 }
 
 // Fatal logs a fatal message and exits
 func Fatal(format string, v ...interface{}) {
-	if !stdioMode {
-		log.Fatal().Msgf(format, v...)
-	} else {
-		// In stdio mode, just exit
+	if stdioMode {
 		os.Exit(1)
 	}
+	log.Fatal().Msgf(format, v...)
 }

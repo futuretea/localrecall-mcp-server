@@ -140,21 +140,21 @@ func runServer(cfgFile string, streams IOStreams) error {
 		}
 		fmt.Fprintf(streams.ErrOut, "Enabled tools: %v\n", server.GetEnabledTools())
 		return server.ServeStdio()
-	} else {
-		// HTTP/SSE mode - use logging
-		logging.Info("Starting LocalRecall MCP Server in HTTP/SSE mode on port %d", cfg.Port)
-		logging.Info("LocalRecall URL: %s", cfg.LocalRecallURL)
-		if cfg.LocalRecallCollection != "" {
-			logging.Info("Default collection: %s", cfg.LocalRecallCollection)
-		}
-		logging.Info("Enabled tools: %v", server.GetEnabledTools())
-		if cfg.SSEBaseURL != "" {
-			logging.Info("SSE Base URL: %s", cfg.SSEBaseURL)
-		}
-
-		ctx := context.Background()
-		return internalhttp.Serve(ctx, server, cfg)
 	}
+
+	// HTTP/SSE mode - use logging
+	logging.Info("Starting LocalRecall MCP Server in HTTP/SSE mode on port %d", cfg.Port)
+	logging.Info("LocalRecall URL: %s", cfg.LocalRecallURL)
+	if cfg.LocalRecallCollection != "" {
+		logging.Info("Default collection: %s", cfg.LocalRecallCollection)
+	}
+	logging.Info("Enabled tools: %v", server.GetEnabledTools())
+	if cfg.SSEBaseURL != "" {
+		logging.Info("SSE Base URL: %s", cfg.SSEBaseURL)
+	}
+
+	ctx := context.Background()
+	return internalhttp.Serve(ctx, server, cfg)
 }
 
 // newVersionCommand creates the version command

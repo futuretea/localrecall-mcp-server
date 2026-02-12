@@ -1,6 +1,8 @@
 package localrecall
 
 import (
+	"maps"
+
 	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/futuretea/localrecall-mcp-server/pkg/toolset"
@@ -21,374 +23,146 @@ func (t *Toolset) GetDescription() string {
 	return "LocalRecall knowledge base management tools"
 }
 
-// GetTools returns all LocalRecall tools
-func (t *Toolset) GetTools(client interface{}) []toolset.ServerTool {
-	tools := []toolset.ServerTool{}
+// prop creates a JSON schema property definition.
+func prop(typ, desc string) map[string]interface{} {
+	return map[string]interface{}{
+		"type":        typ,
+		"description": desc,
+	}
+}
 
-	// Determine if we should use simplified tools (with default collection)
-	useDefaultCollection := t.DefaultCollection != ""
+// collectionToolDef describes a tool that operates on a specific collection.
+// The collection_name parameter is automatically added based on DefaultCollection.
+type collectionToolDef struct {
+	name        string
+	descDefault string // description prefix when default collection is set (collection name appended)
+	descGeneric string // description when no default collection
+	handler     toolset.ToolHandler
+	props       map[string]interface{} // properties excluding collection_name
+	required    []string               // required params excluding collection_name
+}
 
-	if useDefaultCollection {
-		// Tools with default collection - collection_name is optional
-		tools = append(tools,
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "search",
-					Description: "Search content in LocalRecall collection '" + t.DefaultCollection + "'",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"query": map[string]interface{}{
-								"type":        "string",
-								"description": "The search query",
-							},
-							"max_results": map[string]interface{}{
-								"type":        "number",
-								"description": "Maximum number of results to return (default: 5)",
-							},
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "Optional: override the default collection",
-							},
-						},
-						Required: []string{"query"},
-					},
-				},
-				Handler: SearchHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "add_document",
-					Description: "Add a document to LocalRecall collection '" + t.DefaultCollection + "'",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"filename": map[string]interface{}{
-								"type":        "string",
-								"description": "The filename for the document",
-							},
-							"file_path": map[string]interface{}{
-								"type":        "string",
-								"description": "Path to the file to upload (mutually exclusive with file_content)",
-							},
-							"file_content": map[string]interface{}{
-								"type":        "string",
-								"description": "File content as string (mutually exclusive with file_path)",
-							},
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "Optional: override the default collection",
-							},
-						},
-						Required: []string{"filename"},
-					},
-				},
-				Handler: AddDocumentHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "list_files",
-					Description: "List files in LocalRecall collection '" + t.DefaultCollection + "'",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "Optional: override the default collection",
-							},
-						},
-					},
-				},
-				Handler: ListFilesHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "delete_entry",
-					Description: "Delete an entry from LocalRecall collection '" + t.DefaultCollection + "'",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"entry": map[string]interface{}{
-								"type":        "string",
-								"description": "The filename of the entry to delete",
-							},
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "Optional: override the default collection",
-							},
-						},
-						Required: []string{"entry"},
-					},
-				},
-				Handler: DeleteEntryHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "get_entry_content",
-					Description: "Get the content of a specific entry in LocalRecall collection '" + t.DefaultCollection + "'",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"entry": map[string]interface{}{
-								"type":        "string",
-								"description": "The filename of the entry to retrieve",
-							},
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "Optional: override the default collection",
-							},
-						},
-						Required: []string{"entry"},
-					},
-				},
-				Handler: GetEntryContentHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "register_source",
-					Description: "Register an external source for LocalRecall collection '" + t.DefaultCollection + "'",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"url": map[string]interface{}{
-								"type":        "string",
-								"description": "The URL of the external source",
-							},
-							"update_interval": map[string]interface{}{
-								"type":        "number",
-								"description": "Update interval in seconds (0 or omit for no auto-update)",
-							},
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "Optional: override the default collection",
-							},
-						},
-						Required: []string{"url"},
-					},
-				},
-				Handler: RegisterSourceHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "remove_source",
-					Description: "Remove an external source from LocalRecall collection '" + t.DefaultCollection + "'",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"url": map[string]interface{}{
-								"type":        "string",
-								"description": "The URL of the external source to remove",
-							},
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "Optional: override the default collection",
-							},
-						},
-						Required: []string{"url"},
-					},
-				},
-				Handler: RemoveSourceHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "list_sources",
-					Description: "List external sources for LocalRecall collection '" + t.DefaultCollection + "'",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "Optional: override the default collection",
-							},
-						},
-					},
-				},
-				Handler: ListSourcesHandler,
-			},
-		)
+// buildCollectionTool creates a ServerTool from a collectionToolDef,
+// handling default/non-default collection_name automatically.
+func (t *Toolset) buildCollectionTool(def collectionToolDef) toolset.ServerTool {
+	props := make(map[string]interface{})
+	maps.Copy(props, def.props)
+
+	var desc string
+	required := make([]string, len(def.required))
+	copy(required, def.required)
+
+	if t.DefaultCollection != "" {
+		desc = def.descDefault + " '" + t.DefaultCollection + "'"
+		props["collection_name"] = prop("string", "Optional: override the default collection")
 	} else {
-		// Tools without default collection - collection_name is required
-		tools = append(tools,
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "search",
-					Description: "Search content in a LocalRecall collection",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "The name of the collection to search",
-							},
-							"query": map[string]interface{}{
-								"type":        "string",
-								"description": "The search query",
-							},
-							"max_results": map[string]interface{}{
-								"type":        "number",
-								"description": "Maximum number of results to return (default: 5)",
-							},
-						},
-						Required: []string{"collection_name", "query"},
-					},
-				},
-				Handler: SearchHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "add_document",
-					Description: "Add a document to a LocalRecall collection",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "The name of the collection",
-							},
-							"filename": map[string]interface{}{
-								"type":        "string",
-								"description": "The filename for the document",
-							},
-							"file_path": map[string]interface{}{
-								"type":        "string",
-								"description": "Path to the file to upload (mutually exclusive with file_content)",
-							},
-							"file_content": map[string]interface{}{
-								"type":        "string",
-								"description": "File content as string (mutually exclusive with file_path)",
-							},
-						},
-						Required: []string{"collection_name", "filename"},
-					},
-				},
-				Handler: AddDocumentHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "list_files",
-					Description: "List files in a LocalRecall collection",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "The name of the collection",
-							},
-						},
-						Required: []string{"collection_name"},
-					},
-				},
-				Handler: ListFilesHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "delete_entry",
-					Description: "Delete an entry from a LocalRecall collection",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "The name of the collection",
-							},
-							"entry": map[string]interface{}{
-								"type":        "string",
-								"description": "The filename of the entry to delete",
-							},
-						},
-						Required: []string{"collection_name", "entry"},
-					},
-				},
-				Handler: DeleteEntryHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "get_entry_content",
-					Description: "Get the content of a specific entry in a LocalRecall collection",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "The name of the collection",
-							},
-							"entry": map[string]interface{}{
-								"type":        "string",
-								"description": "The filename of the entry to retrieve",
-							},
-						},
-						Required: []string{"collection_name", "entry"},
-					},
-				},
-				Handler: GetEntryContentHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "register_source",
-					Description: "Register an external source for a LocalRecall collection",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "The name of the collection",
-							},
-							"url": map[string]interface{}{
-								"type":        "string",
-								"description": "The URL of the external source",
-							},
-							"update_interval": map[string]interface{}{
-								"type":        "number",
-								"description": "Update interval in seconds (0 or omit for no auto-update)",
-							},
-						},
-						Required: []string{"collection_name", "url"},
-					},
-				},
-				Handler: RegisterSourceHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "remove_source",
-					Description: "Remove an external source from a LocalRecall collection",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "The name of the collection",
-							},
-							"url": map[string]interface{}{
-								"type":        "string",
-								"description": "The URL of the external source to remove",
-							},
-						},
-						Required: []string{"collection_name", "url"},
-					},
-				},
-				Handler: RemoveSourceHandler,
-			},
-			toolset.ServerTool{
-				Tool: mcp.Tool{
-					Name:        "list_sources",
-					Description: "List external sources for a LocalRecall collection",
-					InputSchema: mcp.ToolInputSchema{
-						Type: "object",
-						Properties: map[string]interface{}{
-							"collection_name": map[string]interface{}{
-								"type":        "string",
-								"description": "The name of the collection",
-							},
-						},
-						Required: []string{"collection_name"},
-					},
-				},
-				Handler: ListSourcesHandler,
-			},
-		)
+		desc = def.descGeneric
+		props["collection_name"] = prop("string", "The name of the collection")
+		required = append([]string{"collection_name"}, required...)
 	}
 
-	// These tools are always the same regardless of default collection
+	return toolset.ServerTool{
+		Tool: mcp.Tool{
+			Name:        def.name,
+			Description: desc,
+			InputSchema: mcp.ToolInputSchema{
+				Type:       "object",
+				Properties: props,
+				Required:   required,
+			},
+		},
+		Handler: def.handler,
+	}
+}
+
+// GetTools returns all LocalRecall tools
+func (t *Toolset) GetTools(client interface{}) []toolset.ServerTool {
+	// Collection-scoped tools: collection_name is optional (with default) or required (without)
+	collectionTools := []collectionToolDef{
+		{
+			name:        "search",
+			descDefault: "Search content in LocalRecall collection",
+			descGeneric: "Search content in a LocalRecall collection",
+			handler:     SearchHandler,
+			props: map[string]interface{}{
+				"query":       prop("string", "The search query"),
+				"max_results": prop("number", "Maximum number of results to return (default: 5)"),
+			},
+			required: []string{"query"},
+		},
+		{
+			name:        "add_document",
+			descDefault: "Add a document to LocalRecall collection",
+			descGeneric: "Add a document to a LocalRecall collection",
+			handler:     AddDocumentHandler,
+			props: map[string]interface{}{
+				"filename":     prop("string", "The filename for the document"),
+				"file_path":    prop("string", "Path to the file to upload (mutually exclusive with file_content)"),
+				"file_content": prop("string", "File content as string (mutually exclusive with file_path)"),
+			},
+			required: []string{"filename"},
+		},
+		{
+			name:        "list_files",
+			descDefault: "List files in LocalRecall collection",
+			descGeneric: "List files in a LocalRecall collection",
+			handler:     ListFilesHandler,
+		},
+		{
+			name:        "delete_entry",
+			descDefault: "Delete an entry from LocalRecall collection",
+			descGeneric: "Delete an entry from a LocalRecall collection",
+			handler:     DeleteEntryHandler,
+			props: map[string]interface{}{
+				"entry": prop("string", "The filename of the entry to delete"),
+			},
+			required: []string{"entry"},
+		},
+		{
+			name:        "get_entry_content",
+			descDefault: "Get the content of a specific entry in LocalRecall collection",
+			descGeneric: "Get the content of a specific entry in a LocalRecall collection",
+			handler:     GetEntryContentHandler,
+			props: map[string]interface{}{
+				"entry": prop("string", "The filename of the entry to retrieve"),
+			},
+			required: []string{"entry"},
+		},
+		{
+			name:        "register_source",
+			descDefault: "Register an external source for LocalRecall collection",
+			descGeneric: "Register an external source for a LocalRecall collection",
+			handler:     RegisterSourceHandler,
+			props: map[string]interface{}{
+				"url":             prop("string", "The URL of the external source"),
+				"update_interval": prop("number", "Update interval in seconds (0 or omit for no auto-update)"),
+			},
+			required: []string{"url"},
+		},
+		{
+			name:        "remove_source",
+			descDefault: "Remove an external source from LocalRecall collection",
+			descGeneric: "Remove an external source from a LocalRecall collection",
+			handler:     RemoveSourceHandler,
+			props: map[string]interface{}{
+				"url": prop("string", "The URL of the external source to remove"),
+			},
+			required: []string{"url"},
+		},
+		{
+			name:        "list_sources",
+			descDefault: "List external sources for LocalRecall collection",
+			descGeneric: "List external sources for a LocalRecall collection",
+			handler:     ListSourcesHandler,
+		},
+	}
+
+	tools := make([]toolset.ServerTool, 0, len(collectionTools)+3)
+	for _, def := range collectionTools {
+		tools = append(tools, t.buildCollectionTool(def))
+	}
+
+	// Collection-independent tools: always the same regardless of default collection
 	tools = append(tools,
 		toolset.ServerTool{
 			Tool: mcp.Tool{
@@ -397,10 +171,7 @@ func (t *Toolset) GetTools(client interface{}) []toolset.ServerTool {
 				InputSchema: mcp.ToolInputSchema{
 					Type: "object",
 					Properties: map[string]interface{}{
-						"name": map[string]interface{}{
-							"type":        "string",
-							"description": "The name of the collection to create",
-						},
+						"name": prop("string", "The name of the collection to create"),
 					},
 					Required: []string{"name"},
 				},
@@ -414,10 +185,7 @@ func (t *Toolset) GetTools(client interface{}) []toolset.ServerTool {
 				InputSchema: mcp.ToolInputSchema{
 					Type: "object",
 					Properties: map[string]interface{}{
-						"name": map[string]interface{}{
-							"type":        "string",
-							"description": "The name of the collection to reset",
-						},
+						"name": prop("string", "The name of the collection to reset"),
 					},
 					Required: []string{"name"},
 				},
