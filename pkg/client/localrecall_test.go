@@ -529,3 +529,51 @@ func TestClient_NetworkError(t *testing.T) {
 		t.Error("Expected network error")
 	}
 }
+
+func TestReindex_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("Expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/collections/test/reindex" {
+			t.Errorf("Expected path /api/collections/test/reindex, got %s", r.URL.Path)
+		}
+
+		response := APIResponse{
+			Success: true,
+			Message: "Collection reindexed successfully",
+			Data: map[string]interface{}{
+				"collection":    "test",
+				"documents":     3,
+				"chunks_before": 10,
+				"chunks_after":  12,
+				"reindexed_at":  "2025-01-01T00:00:00Z",
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	result, err := client.Reindex(context.Background(), "test")
+
+	if err != nil {
+		t.Fatalf("Reindex failed: %v", err)
+	}
+	if result.Collection != "test" {
+		t.Errorf("Expected collection 'test', got %s", result.Collection)
+	}
+	if result.Documents != 3 {
+		t.Errorf("Expected 3 documents, got %d", result.Documents)
+	}
+	if result.ChunksBefore != 10 {
+		t.Errorf("Expected 10 chunks_before, got %d", result.ChunksBefore)
+	}
+	if result.ChunksAfter != 12 {
+		t.Errorf("Expected 12 chunks_after, got %d", result.ChunksAfter)
+	}
+	if result.ReindexedAt != "2025-01-01T00:00:00Z" {
+		t.Errorf("Expected reindexed_at, got %s", result.ReindexedAt)
+	}
+}

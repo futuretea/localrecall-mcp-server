@@ -292,3 +292,21 @@ func ListSourcesHandler(clientInterface interface{}, params map[string]interface
 
 	return handler.FormatOutput(result, format)
 }
+
+// ReindexHandler handles reindex requests
+func ReindexHandler(clientInterface interface{}, params map[string]interface{}) (string, error) {
+	client, err := getClient(clientInterface)
+	if err != nil {
+		return "", err
+	}
+
+	collectionName := handler.GetStringParam(params, "collection_name", "")
+	format := handler.GetStringParam(params, "format", "json")
+
+	result, err := client.Client.Reindex(context.Background(), collectionName)
+	if err != nil {
+		return "", fmt.Errorf("reindex failed: %w", err)
+	}
+
+	return handler.FormatOutput(result, format)
+}

@@ -90,6 +90,15 @@ type EntryContent struct {
 	ChunkCount int    `json:"chunk_count"`
 }
 
+// ReindexResult represents the result of a reindex operation
+type ReindexResult struct {
+	Collection   string `json:"collection"`
+	Documents    int    `json:"documents"`
+	ChunksBefore int    `json:"chunks_before"`
+	ChunksAfter  int    `json:"chunks_after"`
+	ReindexedAt  string `json:"reindexed_at"`
+}
+
 // SourceInfo represents an external source
 type SourceInfo struct {
 	Collection     string `json:"collection"`
@@ -495,5 +504,26 @@ func (c *Client) ListSources(ctx context.Context, collectionName string) (*Sourc
 		Collection: getStringField(data, "collection"),
 		Sources:    getMapArray(data, "sources"),
 		Count:      getIntField(data, "count"),
+	}, nil
+}
+
+// Reindex re-chunks and re-indexes all documents in a collection using the current chunking strategy.
+func (c *Client) Reindex(ctx context.Context, collectionName string) (*ReindexResult, error) {
+	resp, err := c.makeRequest(ctx, "POST", fmt.Sprintf("/api/collections/%s/reindex", collectionName), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := getDataMap(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ReindexResult{
+		Collection:   getStringField(data, "collection"),
+		Documents:    getIntField(data, "documents"),
+		ChunksBefore: getIntField(data, "chunks_before"),
+		ChunksAfter:  getIntField(data, "chunks_after"),
+		ReindexedAt:  getStringField(data, "reindexed_at"),
 	}, nil
 }

@@ -163,6 +163,12 @@ func (t *Toolset) GetTools(client interface{}) []toolset.ServerTool {
 			descGeneric: "List external sources for a LocalRecall collection",
 			handler:     ListSourcesHandler,
 		},
+		{
+			name:        "reindex",
+			descDefault: "Re-chunk and re-index all documents in LocalRecall collection",
+			descGeneric: "Re-chunk and re-index all documents in a LocalRecall collection using the current chunking strategy",
+			handler:     ReindexHandler,
+		},
 	}
 
 	tools := make([]toolset.ServerTool, 0, len(collectionTools))
